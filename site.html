@@ -1,0 +1,513 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>洛谷底图认证生成器</title>
+<style>
+  :root{
+    --bg:#0f1115; --panel:#171a21; --panel2:#1d2129; --text:#eef2f7;
+    --muted:#9aa5b1; --line:#2b313c; --accent:#52c41a; --danger:#ff6b6b;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0;
+    font-family:-apple-system,BlinkMacSystemFont,"Helvetica Neue","PingFang SC","Noto Sans","Noto Sans SC","Source Sans Pro","Source Han Sans","Segoe UI",Arial,"Microsoft YaHei","WenQuanYi Micro Hei",sans-serif;
+    background:linear-gradient(180deg,#0d0f13,#12151b); color:var(--text);
+  }
+  .wrap{max-width:1280px;margin:24px auto;padding:0 18px 48px}
+  h1{font-size:24px;margin:0 0 8px}
+  h2{font-size:15px;margin:0 0 12px;color:#dce3eb}
+  .sub{color:var(--muted);margin-bottom:18px;line-height:1.65}
+  .grid{display:grid;grid-template-columns:390px 1fr;gap:18px;align-items:start}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px}
+  .section{padding:14px 0;border-top:1px solid var(--line)}
+  .section:first-child{padding-top:0;border-top:0}
+  .field{margin-bottom:13px}
+  label{display:block;font-size:13px;color:#c9d1da;margin-bottom:7px}
+  input[type="text"], input[type="number"]{
+    width:100%;border:1px solid var(--line);border-radius:9px;padding:9px 10px;
+    background:#0f1217;color:var(--text);outline:none;
+  }
+  input[type="file"]{width:100%;color:#c9d1da}
+  input:disabled{opacity:.45}
+  .row{display:flex;gap:8px;align-items:center}
+  .row > *{flex:1}
+  .mini{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+  .check{
+    display:flex;gap:8px;align-items:flex-start;font-size:13px;color:#c9d1da;
+    line-height:1.45;cursor:pointer
+  }
+  .check input{margin-top:2px}
+  .preset{display:grid;grid-template-columns:repeat(4,1fr);gap:7px}
+  .preset.three{grid-template-columns:repeat(3,1fr)}
+  .preset button,.btn{
+    border:1px solid var(--line);background:var(--panel2);color:var(--text);
+    border-radius:9px;padding:8px 6px;cursor:pointer;font-size:12px;
+  }
+  .preset button.active{outline:2px solid rgba(255,255,255,.18);border-color:#687585}
+  .dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:4px;vertical-align:-1px}
+  .btn.primary{background:#2563eb;border-color:#2563eb;font-weight:600;font-size:13px}
+  .btn:disabled{opacity:.42;cursor:not-allowed}
+  .hint{font-size:12px;color:var(--muted);line-height:1.55}
+  .error{font-size:12px;color:var(--danger);margin-top:7px;display:none}
+  .previewWrap{overflow:auto;border-radius:10px;border:1px solid var(--line);background:#080a0d;padding:10px}
+  #preview{display:block;width:100%;min-width:760px;height:auto;background:#111}
+  .status{margin-top:10px;font-size:12px;color:var(--muted);line-height:1.6}
+  .warn{color:#ffcc66}.good{color:#8bdc65}
+  .actions{display:flex;gap:8px;margin-top:14px}
+  code{background:#101319;padding:2px 5px;border-radius:5px;color:#d8dee9}
+  .disabledBlock{opacity:.48}
+  @media(max-width:900px){.grid{grid-template-columns:1fr}.wrap{margin-top:14px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>洛谷底图认证生成器</h1>
+  <div class="sub">
+    输出固定为 <b>1168×240</b>。认证顺序固定为 <b>用户名 → Tag → 钩子 → 气球</b>，
+    缺少某项时后面的元素自动向左补位；相邻元素默认间距 3px。Tag 按真实 computed style（12.25px 字号）渲染。
+  </div>
+
+  <div class="grid">
+    <section class="card">
+      <div class="section">
+        <div class="field">
+          <label>底图</label>
+          <input id="file" type="file" accept="image/*">
+          <div class="hint" id="imgInfo">未选择图片</div>
+          <div class="hint" id="fontInfo" style="margin-top:5px">使用洛谷默认字体栈</div>
+        </div>
+        <div class="field">
+          <label>用户名</label>
+          <input id="username" type="text" value="Cute_Wazzy" placeholder="例如 jiazhichen844">
+        </div>
+      </div>
+
+      <div class="section">
+        <h2>已有认证（只用于定位，不会导出）</h2>
+        <label class="check">
+          <input id="hasTag" type="checkbox">
+          <span>我本身已经有 Tag</span>
+        </label>
+        <div id="existingTagFields" style="margin-top:10px;display:none">
+          <div class="field">
+            <label>已有 Tag 文字</label>
+            <input id="existingTagText" type="text" placeholder="例如 管理员">
+          </div>
+          <div class="hint">开启后会把已有 Tag 的宽度计入后续钩子 / 气球位置，但不会把它画进导出的背景。</div>
+        </div>
+      </div>
+
+      <div class="section">
+        <h2>要添加到背景中的认证</h2>
+
+        <div class="field">
+          <label class="check">
+            <input id="addTag" type="checkbox">
+            <span><b>添加 Tag</b> <span class="hint">（实验功能；与“我本身已经有 Tag”互斥）</span></span>
+          </label>
+          <div id="addTagFields" style="margin-top:10px;display:none">
+            <div class="field">
+              <label>Tag 文字</label>
+              <input id="addTagText" type="text" value="管理员" placeholder="Tag 内容">
+            </div>
+            <label>Tag 颜色</label>
+            <div class="preset" id="tagPresets">
+              <button type="button" data-color="#9d3dcf"><span class="dot" style="background:#9d3dcf"></span>紫</button>
+              <button type="button" data-color="#fe4c61"><span class="dot" style="background:#fe4c61"></span>红</button>
+              <button type="button" data-color="#f39c11"><span class="dot" style="background:#f39c11"></span>橙</button>
+              <button type="button" data-color="#52c41a"><span class="dot" style="background:#52c41a"></span>绿</button>
+              <button type="button" data-color="#3498db"><span class="dot" style="background:#3498db"></span>蓝</button>
+              <button type="button" data-color="#bfbfbf"><span class="dot" style="background:#bfbfbf"></span>灰</button>
+              <button type="button" data-color="#ad8b00"><span class="dot" style="background:#ad8b00"></span>棕</button>
+            </div>
+            <div class="row" style="margin-top:8px">
+              <input id="tagColorText" type="text" value="#9d3dcf">
+              <input id="tagColorPicker" type="color" value="#9d3dcf" style="max-width:54px;height:38px;padding:3px">
+            </div>
+          </div>
+        </div>
+
+        <div class="field">
+          <label class="check">
+            <input id="addBadge" type="checkbox" checked>
+            <span><b>添加钩子</b></span>
+          </label>
+          <div id="badgeFields" style="margin-top:10px">
+            <label>钩子颜色</label>
+            <div class="preset three" id="badgePresets">
+              <button type="button" data-color="#52c41a"><span class="dot" style="background:#52c41a"></span>绿钩</button>
+              <button type="button" data-color="#3498db"><span class="dot" style="background:#3498db"></span>蓝钩</button>
+              <button type="button" data-color="#ffc116"><span class="dot" style="background:#ffc116"></span>金钩</button>
+            </div>
+            <div class="row" style="margin-top:8px">
+              <input id="badgeColorText" type="text" value="#52c41a">
+              <input id="badgeColorPicker" type="color" value="#52c41a" style="max-width:54px;height:38px;padding:3px">
+            </div>
+          </div>
+        </div>
+
+        <div class="field">
+          <label class="check">
+            <input id="addBalloon" type="checkbox">
+            <span><b>添加气球</b></span>
+          </label>
+          <div id="balloonFields" style="margin-top:10px;display:none">
+            <label>气球颜色</label>
+            <div class="preset three" id="balloonPresets">
+              <button type="button" data-color="#52c41a"><span class="dot" style="background:#52c41a"></span>绿</button>
+              <button type="button" data-color="#3498db"><span class="dot" style="background:#3498db"></span>蓝</button>
+              <button type="button" data-color="#ffc116"><span class="dot" style="background:#ffc116"></span>金</button>
+            </div>
+            <div class="row" style="margin-top:8px">
+              <input id="balloonColorText" type="text" value="#52c41a">
+              <input id="balloonColorPicker" type="color" value="#52c41a" style="max-width:54px;height:38px;padding:3px">
+            </div>
+          </div>
+        </div>
+
+        <div class="error" id="selectionError">添加 Tag、钩子、气球至少需要选择一个。</div>
+      </div>
+
+      <div class="section">
+        <h2>定位微调</h2>
+        <div class="mini">
+          <div class="field">
+            <label>用户名起始 X</label>
+            <input id="nameX" type="number" value="97" step="1">
+          </div>
+          <div class="field">
+            <label>文字基线 Y</label>
+            <input id="baseY" type="number" value="178" step="1">
+          </div>
+        </div>
+        <div class="mini">
+          <div class="field">
+            <label>认证间距</label>
+            <input id="itemGap" type="number" value="3" min="0" max="20" step="0.5">
+          </div>
+          <div class="field">
+            <label>图标高度</label>
+            <input id="iconSize" type="number" value="16" min="8" max="40" step="1">
+          </div>
+        </div>
+        <label class="check">
+          <input id="guide" type="checkbox" checked>
+          <span>预览定位辅助（用户名 / 已有 Tag 仅在预览显示，不会导出）</span>
+        </label>
+      </div>
+
+      <div class="actions">
+        <button id="download" class="btn primary" disabled>导出 PNG</button>
+        <button id="reset" class="btn">恢复默认</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="previewWrap"><canvas id="preview" width="1168" height="240"></canvas></div>
+      <div class="status" id="status">上传底图后即可预览。</div>
+    </section>
+  </div>
+</div>
+
+<script>
+(() => {
+  const W=1168,H=240;
+  const FONT_STACK='-apple-system,BlinkMacSystemFont,"Helvetica Neue","PingFang SC","Noto Sans","Noto Sans SC","Source Sans Pro","Source Han Sans","Segoe UI",Arial,"Microsoft YaHei","WenQuanYi Micro Hei",sans-serif';
+  const el=id=>document.getElementById(id);
+  const canvas=el('preview'), ctx=canvas.getContext('2d');
+  const out=document.createElement('canvas'); out.width=W; out.height=H;
+  const octx=out.getContext('2d');
+  let img=null;
+
+  const file=el('file'), username=el('username');
+  const hasTag=el('hasTag'), existingTagText=el('existingTagText');
+  const addTag=el('addTag'), addTagText=el('addTagText');
+  const addBadge=el('addBadge'), addBalloon=el('addBalloon');
+  const nameX=el('nameX'), baseY=el('baseY'), itemGap=el('itemGap'), iconSize=el('iconSize');
+  const guide=el('guide'), download=el('download'), status=el('status'), imgInfo=el('imgInfo');
+  const selectionError=el('selectionError');
+
+  const badgePath = new Path2D("M0 256C0 292.8 20.7 324.8 51.1 340.9 41 373.8 49 411 75 437s63.3 34 96.1 23.9C187.2 491.3 219.2 512 256 512s68.8-20.7 84.9-51.1C373.8 471 411 463 437 437s34-63.3 23.9-96.1C491.3 324.8 512 292.8 512 256s-20.7-68.8-51.1-84.9C471 138.2 463 101 437 75s-63.3-34-96.1-23.9C324.8 20.7 292.8 0 256 0s-68.8 20.7-84.9 51.1C138.2 41 101 49 75 75s-34 63.3-23.9 96.1C20.7 187.2 0 219.2 0 256zm152.3 41.6c-9.2-9.5-9-24.7 .6-33.9 9.5-9.2 24.7-8.9 33.9 .6l35.8 37 106.1-145.8c7.8-10.7 22.8-13.1 33.5-5.3 10.7 7.8 13.1 22.8 5.3 33.5L244.7 352.7c-4.2 5.7-10.7 9.4-17.8 9.8-7.1 .5-14-2.2-18.9-7.3l-55.7-57.6z");
+  const checkPath = new Path2D("M328.7 155.5c7.8-10.7 22.8-13.1 33.5-5.3 10.7 7.8 13.1 22.8 5.3 33.5L244.7 352.7c-4.2 5.7-10.7 9.4-17.8 9.8-7.1 .5-14-2.2-18.9-7.3l-55.7-57.6c-9.2-9.5-9-24.7 .6-33.9 9.5-9.2 24.7-8.9 33.9 .6l35.8 37 106.1-145.8z");
+  const balloonSecondaryPath = new Path2D("M56 176c0 13.3 10.7 24 24 24s24-10.7 24-24c0-39.8 32.2-72 72-72 13.3 0 24-10.7 24-24s-10.7-24-24-24C109.7 56 56 109.7 56 176z");
+  const balloonPrimaryPath = new Path2D("M0 192C0 86 86 0 192 0S384 86 384 192c0 128-160 240-160 240l27.9 41.8c2.7 4 4.1 8.8 4.1 13.6 0 13.6-11 24.6-24.6 24.6l-78.9 0c-13.6 0-24.6-11-24.6-24.6 0-4.8 1.4-9.6 4.1-13.6L160 432S0 320 0 192zm104-16c0-39.8 32.2-72 72-72 13.3 0 24-10.7 24-24s-10.7-24-24-24c-66.3 0-120 53.7-120 120 0 13.3 10.7 24 24 24s24-10.7 24-24z");
+
+  function validColor(s){
+    const t=document.createElement('span'); t.style.color=''; t.style.color=s;
+    return !!t.style.color;
+  }
+  function normalizeHex(c){
+    const m=(c||'').trim().match(/^#([0-9a-f]{6})$/i);
+    return m?('#'+m[1].toLowerCase()):null;
+  }
+  function gap(){ return Number(itemGap.value)||0; }
+  function size(){ return Number(iconSize.value)||16; }
+
+  function measureName(){
+    ctx.font=`bold 24px ${FONT_STACK}`;
+    return ctx.measureText(username.value||'').width;
+  }
+
+  // Real Luogu computed style (measured from the innermost tag span):
+  // font-size 12.25px; line-height 18.375px; padding 0 6.125px;
+  // border 1px; border-radius 2px; box-sizing content-box.
+  function measureTag(text){
+    ctx.font=`400 12.25px ${FONT_STACK}`;
+    const textW=ctx.measureText((text||'').trim()).width;
+    return textW + 6.125*2 + 2; // horizontal padding + 1px border on each side
+  }
+
+  function buildLayout(){
+    const x=Number(nameX.value)||97;
+    const y=Number(baseY.value)||178;
+    const g=gap(), s=size();
+    const nameW=measureName();
+    let cursor=x+nameW;
+    const items=[];
+
+    const existing = hasTag.checked && existingTagText.value.trim();
+    if(existing){
+      cursor += g;
+      const w=measureTag(existingTagText.value);
+      items.push({type:'existingTag',x:cursor,w,text:existingTagText.value.trim()});
+      cursor += w;
+    }
+
+    if(addTag.checked){
+      cursor += g;
+      const w=measureTag(addTagText.value);
+      items.push({type:'tag',x:cursor,w,text:addTagText.value.trim()});
+      cursor += w;
+    }
+
+    if(addBadge.checked){
+      cursor += g;
+      items.push({type:'badge',x:cursor,w:s});
+      cursor += s;
+    }
+
+    if(addBalloon.checked){
+      cursor += g;
+      const w=s*0.75; // 384×512 viewBox, preserve aspect ratio.
+      items.push({type:'balloon',x:cursor,w});
+      cursor += w;
+    }
+
+    return {x,y,nameW,items,endX:cursor};
+  }
+
+  function roundRect(c,x,y,w,h,r){
+    c.beginPath(); c.moveTo(x+r,y); c.arcTo(x+w,y,x+w,y+h,r);
+    c.arcTo(x+w,y+h,x,y+h,r); c.arcTo(x,y+h,x,y,r); c.arcTo(x,y,x+w,y,r); c.closePath();
+  }
+
+  function drawTag(c,x,baseline,w,text,color){
+    const fontSize=12.25;
+    const lineHeight=18.375;
+    const padX=6.125;
+    const border=1;
+    const radius=2;
+    const totalH=lineHeight + border*2; // 20.375px, matching getBoundingClientRect()
+    // inline-block vertical-align: baseline: leave a small descender allowance below text.
+    // This places the tag relative to the same username baseline used by the layout.
+    const descender=3.0625; // 0.25em at 12.25px
+    const top=baseline-(lineHeight-descender)-border;
+
+    c.save();
+
+    // Border geometry is included because it affects the exact 51px measured width.
+    // Its color is approximated from the fill so compression makes the difference negligible.
+    c.fillStyle=color;
+    roundRect(c,x,top,w,totalH,radius); c.fill();
+
+    // Draw an inset fill; border color itself is intentionally visually ignored.
+    c.font=`400 ${fontSize}px ${FONT_STACK}`;
+    c.textBaseline='alphabetic';
+    c.fillStyle='#fff';
+
+    // Center the actual text advance inside the measured content box.
+    // Approximate browser line-box baseline from the measured line-height.
+    const textBaseline=top+border+(lineHeight-fontSize)/2+fontSize*0.8;
+    c.fillText(text,x+border+padX,textBaseline);
+    c.restore();
+  }
+
+  function drawBadge(c,x,baseline,s,color){
+    // 16×16 visual artwork, aligned like Font Awesome vertical-align:-0.125em.
+    const cy=baseline-s*0.375;
+    c.save();
+    c.translate(x,cy-s/2);
+    c.scale(s/512,s/512);
+    c.fillStyle=color; c.fill(badgePath);
+    c.fillStyle='#fff'; c.fill(checkPath);
+    c.restore();
+  }
+
+  function drawBalloon(c,x,baseline,s,color){
+    // Preserve the source 384×512 balloon aspect ratio => 12×16 at default size.
+    const w=s*0.75;
+    const cy=baseline-s*0.375;
+    c.save();
+    c.translate(x,cy-s/2);
+    c.scale(w/384,s/512);
+    c.fillStyle=color; c.fill(balloonPrimaryPath);
+    c.fillStyle='#fff'; c.fill(balloonSecondaryPath);
+    c.restore();
+  }
+
+  function drawCover(c){
+    const scale=Math.max(W/img.width,H/img.height);
+    const sw=W/scale, sh=H/scale;
+    const sx=(img.width-sw)/2, sy=(img.height-sh)/2;
+    c.drawImage(img,sx,sy,sw,sh,0,0,W,H);
+  }
+
+  function fakeSelected(){ return addTag.checked || addBadge.checked || addBalloon.checked; }
+
+  function syncUI(){
+    if(hasTag.checked && addTag.checked) addTag.checked=false;
+    addTag.disabled=hasTag.checked;
+    el('existingTagFields').style.display=hasTag.checked?'block':'none';
+    el('addTagFields').style.display=addTag.checked?'block':'none';
+    el('badgeFields').style.display=addBadge.checked?'block':'none';
+    el('balloonFields').style.display=addBalloon.checked?'block':'none';
+    selectionError.style.display=fakeSelected()?'none':'block';
+  }
+
+  function render(){
+    syncUI();
+    ctx.clearRect(0,0,W,H); octx.clearRect(0,0,W,H);
+
+    if(!img){
+      ctx.fillStyle='#11151b'; ctx.fillRect(0,0,W,H);
+      ctx.fillStyle='#8792a2'; ctx.font='20px sans-serif';
+      ctx.fillText('请先上传 1168×240 底图',40,60);
+      download.disabled=true;
+      return;
+    }
+
+    drawCover(ctx); drawCover(octx);
+    const L=buildLayout();
+
+    const tagColor=validColor(el('tagColorText').value)?el('tagColorText').value:'#9d3dcf';
+    const badgeColor=validColor(el('badgeColorText').value)?el('badgeColorText').value:'#52c41a';
+    const balloonColor=validColor(el('balloonColorText').value)?el('balloonColorText').value:'#52c41a';
+
+    // Export canvas: draw ONLY fake/additional certifications.
+    for(const it of L.items){
+      if(it.type==='tag') drawTag(octx,it.x,L.y,it.w,it.text,tagColor);
+      if(it.type==='badge') drawBadge(octx,it.x,L.y,size(),badgeColor);
+      if(it.type==='balloon') drawBalloon(octx,it.x,L.y,size(),balloonColor);
+    }
+
+    // Preview: same fake elements + optional positioning guides.
+    for(const it of L.items){
+      if(it.type==='tag') drawTag(ctx,it.x,L.y,it.w,it.text,tagColor);
+      if(it.type==='badge') drawBadge(ctx,it.x,L.y,size(),badgeColor);
+      if(it.type==='balloon') drawBalloon(ctx,it.x,L.y,size(),balloonColor);
+    }
+
+    if(guide.checked){
+      ctx.save();
+      ctx.font=`bold 24px ${FONT_STACK}`;
+      ctx.textBaseline='alphabetic';
+      ctx.fillStyle='rgba(255,255,255,.92)';
+      ctx.shadowColor='rgba(0,0,0,.45)'; ctx.shadowBlur=3;
+      ctx.fillText(username.value,L.x,L.y);
+      ctx.shadowBlur=0;
+
+      for(const it of L.items){
+        if(it.type==='existingTag'){
+          // Position-only simulation: use purple, matching common Luogu admin/tag sample.
+          drawTag(ctx,it.x,L.y,it.w,it.text,'#9d3dcf');
+        }
+      }
+
+      ctx.strokeStyle='rgba(255,255,255,.42)';
+      ctx.setLineDash([4,4]);
+      for(const it of L.items){
+        if(it.type!=='existingTag'){
+          ctx.beginPath(); ctx.moveTo(it.x,18); ctx.lineTo(it.x,H-18); ctx.stroke();
+        }
+      }
+      ctx.setLineDash([]);
+      ctx.restore();
+    }
+
+    const ok=fakeSelected();
+    download.disabled=!ok;
+
+    const dimOk=img.width===W && img.height===H;
+    const positions=L.items.filter(i=>i.type!=='existingTag').map(i=>{
+      const n=i.type==='tag'?'Tag':i.type==='badge'?'钩子':'气球';
+      return `${n} X≈${i.x.toFixed(1)}`;
+    }).join('；');
+
+    status.innerHTML=(positions||'尚未选择要添加的认证')+
+      `；用户名起点 X=${L.x.toFixed(1)}；间距 ${gap().toFixed(1)}px。 `+
+      (dimOk?'<span class="good">底图尺寸正确。</span>':'<span class="warn">底图不是 1168×240，将居中裁切填满。</span>');
+  }
+
+  function bindColor(prefix,presetsId){
+    const text=el(prefix+'ColorText'), picker=el(prefix+'ColorPicker'), box=el(presetsId);
+    function active(){
+      const c=(normalizeHex(text.value)||'').toLowerCase();
+      box.querySelectorAll('button').forEach(b=>b.classList.toggle('active',b.dataset.color.toLowerCase()===c));
+    }
+    box.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{
+      text.value=b.dataset.color; picker.value=b.dataset.color; active(); render();
+    }));
+    text.addEventListener('input',()=>{
+      const h=normalizeHex(text.value); if(h) picker.value=h;
+      active(); render();
+    });
+    picker.addEventListener('input',()=>{text.value=picker.value; active(); render();});
+    active();
+  }
+
+  file.addEventListener('change',e=>{
+    const f=e.target.files&&e.target.files[0]; if(!f)return;
+    const url=URL.createObjectURL(f), im=new Image();
+    im.onload=()=>{img=im;imgInfo.textContent=`${im.width}×${im.height} · ${f.name}`;URL.revokeObjectURL(url);render();};
+    im.src=url;
+  });
+
+  [username,hasTag,existingTagText,addTag,addTagText,addBadge,addBalloon,nameX,baseY,itemGap,iconSize,guide]
+    .forEach(x=>x.addEventListener('input',render));
+  [hasTag,addTag,addBadge,addBalloon].forEach(x=>x.addEventListener('change',render));
+
+  bindColor('tag','tagPresets');
+  bindColor('badge','badgePresets');
+  bindColor('balloon','balloonPresets');
+
+  el('reset').addEventListener('click',()=>{
+    hasTag.checked=false; existingTagText.value='';
+    addTag.checked=false; addTagText.value='管理员';
+    addBadge.checked=true; addBalloon.checked=false;
+    el('tagColorText').value='#9d3dcf'; el('tagColorPicker').value='#9d3dcf';
+    el('badgeColorText').value='#52c41a'; el('badgeColorPicker').value='#52c41a';
+    el('balloonColorText').value='#52c41a'; el('balloonColorPicker').value='#52c41a';
+    nameX.value=97;baseY.value=178;itemGap.value=3;iconSize.value=16;
+    render();
+  });
+
+  download.addEventListener('click',()=>{
+    if(!fakeSelected()){selectionError.style.display='block';return;}
+    out.toBlob(blob=>{
+      const a=document.createElement('a');
+      a.href=URL.createObjectURL(blob);
+      a.download='luogu-background-certifications.png';
+      a.click();
+      setTimeout(()=>URL.revokeObjectURL(a.href),1500);
+    },'image/png');
+  });
+
+  syncUI();
+  render();
+})();
+</script>
+<script src="/register-sw.js" defer></script><script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v3d52b47920f24c319d37e2661827c42b1787588026925" integrity="sha512-d9sL6GJLXn6fInD1+TVXhTcQOsmxeHfmHAvwGDIxp5TO+uo1fiWW7mHomMj4MLRlCsJDTqXzWLHJFFlPCEIj/A==" data-cf-beacon='{"version":"2024.11.0","token":"df358ff767b04bcd8e3e7d3b1f6f5c6e","r":1}' crossorigin="anonymous"></script>
+</body>
+</html>
